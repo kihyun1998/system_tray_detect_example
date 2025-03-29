@@ -1,15 +1,18 @@
+import 'dart:ffi' as ffi;
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:system_tray/system_tray.dart';
+import 'package:win32/win32.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
 
-  WindowOptions windowOptions = const WindowOptions(
+  WindowOptions windowOptions = WindowOptions(
     size: Size(400, 300),
     center: true,
     title: 'Tray App Example',
@@ -86,6 +89,12 @@ class _TrayAppState extends State<TrayApp> {
           await bringWindowToFrontViaFindWindow();
         },
       ),
+      MenuItemLabel(
+        label: 'BringToFront (FFI)',
+        onClicked: (_) async {
+          bringWindowToFrontViaWin32();
+        },
+      ),
     ]);
 
     // 5. 구성된 메뉴를 컨텍스트 메뉴로 설정
@@ -125,6 +134,26 @@ class _TrayAppState extends State<TrayApp> {
     } on PlatformException catch (e) {
       debugPrint("에러: ${e.message}");
     }
+  }
+
+  /// 정확한 창 타이틀을 입력해야 함 (windowManager.setTitle과 동일하게)
+  void bringWindowToFrontViaWin32() {
+    final windowName = 'Tray App Example'.toNativeUtf16();
+
+    final hwnd = FindWindow(ffi.nullptr, windowName);
+
+    if (hwnd == 0) {
+      print('⚠️ 창을 찾지 못했습니다.');
+      calloc.free(windowName);
+      return;
+    }
+
+    print('✅ 창 찾음 HWND: $hwnd');
+
+    ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_RESTORE);
+    SetForegroundWindow(hwnd);
+
+    calloc.free(windowName);
   }
 
   @override
