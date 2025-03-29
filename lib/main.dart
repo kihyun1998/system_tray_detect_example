@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:system_tray/system_tray.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -48,13 +49,21 @@ class _TrayAppState extends State<TrayApp> {
   }
 
   Future<void> _initSystemTray() async {
-    const String path = 'assets/app_icon.ico';
+    // 1. 아이콘 경로 설정 (assets 확인)
+    String path = 'assets/app_icon.ico';
+    if (!await File(path).exists()) {
+      debugPrint("아이콘 파일 없음: $path");
+      // 기본 아이콘으로 대체하거나 에러 처리
+    }
 
-    await _systemTray.initSystemTray(
-      title: "Tray App",
-      iconPath: path,
-    );
+    // 2. 시스템 트레이 초기화 (간단하게 시작)
+    await _systemTray.initSystemTray(iconPath: path);
 
+    // 3. 추가 속성 설정
+    _systemTray.setTitle("Tray App");
+    _systemTray.setToolTip("시스템 트레이 앱");
+
+    // 4. 메뉴 구성
     final Menu menu = Menu();
     await menu.buildFrom([
       MenuItemLabel(
@@ -71,20 +80,51 @@ class _TrayAppState extends State<TrayApp> {
           exit(0);
         },
       ),
+      MenuItemLabel(
+        label: 'FindWindow',
+        onClicked: (_) async {
+          await bringWindowToFrontViaFindWindow();
+        },
+      ),
     ]);
 
+    // 5. 구성된 메뉴를 컨텍스트 메뉴로 설정
     await _systemTray.setContextMenu(menu);
 
+    // 6. 이벤트 핸들러 등록 (플랫폼별 처리)
     _systemTray.registerSystemTrayEventHandler((eventName) async {
+      debugPrint("시스템 트레이 이벤트: $eventName");
       if (eventName == kSystemTrayEventClick) {
-        await windowManager.show();
-        await windowManager.focus();
+        if (Platform.isWindows) {
+          await windowManager.show();
+          await windowManager.focus();
+        } else {
+          await _systemTray.popUpContextMenu();
+        }
+      } else if (eventName == kSystemTrayEventRightClick) {
+        if (Platform.isWindows) {
+          await _systemTray.popUpContextMenu();
+        } else {
+          await windowManager.show();
+          await windowManager.focus();
+        }
       }
     });
   }
 
   Future<void> _sendToTray() async {
     await windowManager.hide();
+  }
+
+  static const platform = MethodChannel('com.example.tray_channel');
+
+  Future<void> bringWindowToFrontViaFindWindow() async {
+    try {
+      final bool success = await platform.invokeMethod('bring_to_front');
+      debugPrint("FindWindow 실행 결과: $success");
+    } on PlatformException catch (e) {
+      debugPrint("에러: ${e.message}");
+    }
   }
 
   @override
